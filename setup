@@ -1,0 +1,262 @@
+#!/bin/bash
+# Script for install neovim
+
+set -e
+
+if [ $# -ne 1 ]; then
+  echo "Usage: $0 <Home directory>"
+  exit 1
+fi
+
+HOME=$1
+
+if ! command -v nvim &> /dev/null; then
+  echo "Downloading neovim..."
+  
+  curl -LO https://github.com/neovim/neovim/releases/latest/download/nvim-linux-x86_64.tar.gz
+
+  rm -rf /opt/nvim-linux-x86_64
+  
+  echo "Extracting neovim ..."
+  tar -C /opt -xzf nvim-linux-x86_64.tar.gz
+
+  echo "Set Environtment Variable ..."
+  
+  # Fish shell
+  echo 'set -x PATH /opt/nvim-linux-x86_64/bin $PATH' >> "$HOME"/.config/fish/config.fish
+  echo "Neovim path added to fish config"
+
+  # Bash shell
+  echo 'export PATH="$PATH:/opt/nvim-linux-x86_64/bin"' >> "$HOME"/.bashrc
+  echo "Neovim path added to bash config"
+fi
+
+# Installing plugin
+git clone https://github.com/folke/lazy.nvim.git \
+                           "$HOME"/.local/share/nvim/lazy/lazy.nvim
+
+if [ -d "$HOME/.config/nvim" ]; then
+  rm -rf "$HOME/.config/nvim"
+  echo "Deleted existing: $HOME/.config/nvim"
+fi
+
+mkdir "$HOME"/.config/nvim/
+touch "$HOME"/.config/nvim/init.lua
+
+# Write config
+echo "Add Config ..."
+
+cat <<EOF >> "$HOME"/.config/nvim/init.lua
+-- set leader key early (optional)
+vim.g.mapleader = " "
+
+-- bootstrap lazy.nvim
+local lazypath = vim.fn.stdpath("data") .. "/lazy/lazy.nvim"
+if not vim.loop.fs_stat(lazypath) then
+  vim.fn.system({
+    "git",
+    "clone",
+    "--filter=blob:none",
+    "https://github.com/folke/lazy.nvim.git",
+    "--branch=stable", -- latest stable release
+    lazypath,
+  })
+end
+vim.opt.rtp:prepend(lazypath)
+
+-- setup lazy.nvim
+require("lazy").setup({
+  -- example plugins
+  "nvim-lua/plenary.nvim",
+  "nvim-treesitter/nvim-treesitter",
+  {
+    "scottmckendry/cyberdream.nvim",
+    lazy = false,    -- ensures it's loaded immediately so colorscheme is applied
+    priority = 1000, -- give it high priority so it loads before anything else that might redraw highlights
+  },
+  { "catppuccin/nvim", name = "catppuccin", priority = 1000 },
+  -- Statusline
+  { "nvim-lualine/lualine.nvim", dependencies = { "nvim-tree/nvim-web-devicons" } },
+
+  -- File Explorer
+  { "nvim-tree/nvim-tree.lua", dependencies = { "nvim-tree/nvim-web-devicons" } },
+
+  -- Telescope (fuzzy finder)
+  { "nvim-telescope/telescope.nvim", dependencies = { "nvim-lua/plenary.nvim" } },
+
+  -- Treesitter
+  { "nvim-treesitter/nvim-treesitter", build = ":TSUpdate" },
+
+  -- Autocomplete
+  {
+    "hrsh7th/nvim-cmp",
+    dependencies = {
+      "hrsh7th/cmp-nvim-lsp",
+      "hrsh7th/cmp-buffer",
+      "hrsh7th/cmp-path",
+      "L3MON4D3/LuaSnip",
+      "saadparwaiz1/cmp_luasnip",
+      "rafamadriz/friendly-snippets"
+    }
+  },
+
+  -- LSP
+  { "neovim/nvim-lspconfig" },
+  { "williamboman/mason.nvim", build = function()
+        vim.cmd("MasonUpdate") -- correct way
+        end },
+  { "williamboman/mason-lspconfig.nvim" },
+
+  -- Git
+  { "lewis6991/gitsigns.nvim" },
+})
+
+require("catppuccin").setup({
+    flavour = "auto", -- latte, frappe, macchiato, mocha
+    background = { 
+        light = "latte",
+        dark = "mocha",
+    },
+    transparent_background = false, -- disables setting the background color.
+    float = {
+        transparent = false, -- enable transparent floating windows
+        solid = false, -- use solid styling for floating windows, see |winborder|
+    },
+    show_end_of_buffer = false, -- shows the '~' characters after the end of buffers
+    term_colors = false, -- sets terminal colors (e.g. g:terminal_color_0)
+    dim_inactive = {
+        enabled = false, -- dims the background color of inactive window
+        shade = "dark",
+        percentage = 0.15, -- percentage of the shade to apply to the inactive window
+    },
+    no_italic = false, -- Force no italic
+    no_bold = false, -- Force no bold
+    no_underline = false, -- Force no underline
+    styles = { -- Handles the styles of general hi groups (see :h highlight-args):
+        comments = { "italic" }, -- Change the style of comments
+        conditionals = { "italic" },
+        loops = {},
+        functions = {},
+        keywords = {},
+        strings = {},
+        variables = {},
+        numbers = {},
+        booleans = {},
+        properties = {},
+        types = {},
+        operators = {},
+        -- miscs = {}, -- Uncomment to turn off hard-coded styles
+    },
+    color_overrides = {},
+    custom_highlights = {},
+    default_integrations = true,
+    auto_integrations = false,
+    integrations = {
+        cmp = true,
+        gitsigns = true,
+        nvimtree = true,
+        treesitter = true,
+        notify = false,
+        mini = {
+            enabled = true,
+            indentscope_color = "",
+        },
+        -- For more plugins integrations please scroll down (https://github.com/catppuccin/nvim#integrations)
+    },
+})
+
+-- apply it
+-- vim.cmd("colorscheme cyberdream")
+vim.cmd("colorscheme catppuccin")
+
+
+-- Lualine
+require("lualine").setup({ options = { theme = "auto" } })
+
+-- NvimTree
+require("nvim-tree").setup()
+vim.keymap.set("n", "<leader>e", ":NvimTreeToggle<CR>", { silent = true })
+
+-- Telescope
+local builtin = require("telescope.builtin")
+vim.keymap.set("n", "<leader>ff", builtin.find_files, {})
+vim.keymap.set("n", "<leader>fg", builtin.live_grep, {})
+vim.keymap.set("n", "<leader>fb", builtin.buffers, {})
+vim.keymap.set("n", "<leader>fh", builtin.help_tags, {})
+
+
+-- LSP + Autocomplete
+require("mason").setup()
+require("mason-lspconfig").setup({
+  ensure_installed = { "lua_ls", "biome", "pyright" },
+  -- ensure_installed = { "lua_ls", "ts_ls", "pyright" }, -- choose what you need
+})
+
+local lspconfig = require("lspconfig")
+local capabilities = require("cmp_nvim_lsp").default_capabilities()
+
+-- for _, lsp in ipairs({ "lua_ls", "ts_ls", "pyright" }) do
+for _, lsp in ipairs({ "lua_ls", "biome", "pyright" }) do
+  vim.lsp.config[lsp] = { capabilities = capabilities }
+  -- lspconfig[lsp].setup({ capabilities = capabilities })
+end
+
+vim.lsp.config.ts_ls = {
+  on_attach = function(client, bufnr)
+    -- your on_attach logic
+  end,
+  capabilities = require('cmp_nvim_lsp').default_capabilities(),
+}
+
+local cmp = require("cmp")
+local luasnip = require("luasnip")
+require("luasnip.loaders.from_vscode").lazy_load()
+
+cmp.setup({
+  snippet = {
+    expand = function(args) luasnip.lsp_expand(args.body) end,
+  },
+  mapping = cmp.mapping.preset.insert({
+    ["<Tab>"] = cmp.mapping.select_next_item(),
+    ["<S-Tab>"] = cmp.mapping.select_prev_item(),
+    ["<CR>"] = cmp.mapping.confirm({ select = true }),
+  }),
+  sources = {
+    { name = "nvim_lsp" },
+    { name = "luasnip" },
+    { name = "buffer" },
+    { name = "path" },
+  },
+})
+
+vim.opt.number = true
+vim.opt.relativenumber = true
+
+-- Set number column width
+vim.opt.numberwidth = 4
+
+-- Highlight current line
+vim.opt.cursorline = true
+
+-- init.lua
+vim.opt.guifont = "FiraCode Nerd Font:h12"
+
+vim.keymap.set('n', '<C-Up>', ':resize +2<CR>', { silent = true })
+vim.keymap.set('n', '<C-Down>', ':resize -2<CR>', { silent = true })
+vim.keymap.set('n', '<C-Left>', ':vertical resize -2<CR>', { silent = true })
+vim.keymap.set('n', '<C-Right>', ':vertical resize +2<CR>', { silent = true })
+EOF
+
+echo "Finishing installation ..."
+if [ -n "$FISH_VERSION" ]; then
+    # Fish shell
+    source "$HOME"/.config/fish/config.fish
+elif [ -n "$BASH_VERSION" ]; then
+    # Bash shell
+    source "$HOME"/.bashrc
+else
+    echo "Unknown shell: $SHELL"
+fi
+
+chmod -R 777 "$HOME"/.local/share/nvim
+chmod -R 777 "$HOME"/.config/nvim
